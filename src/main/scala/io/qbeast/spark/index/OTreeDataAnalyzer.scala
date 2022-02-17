@@ -62,35 +62,42 @@ object DoublePassOTreeDataAnalyzer extends OTreeDataAnalyzer with Serializable {
       row: Row,
       revision: Revision): Option[RevisionChange] = {
 
+    val rowMap = (colName: String) => row.getAs[Object](colName)
     // Get all new defined transformations
+    val newTransformers = revision.columnTransformers
+      .filter(ct => !ct.isIdentityTransformation(rowMap))
+
     val newTransformations =
-      revision.columnTransformers
-        .map(ct => (ct, ct.maybeMakeTransformation(colName => row.getAs[Object](colName))))
-        .filter(_._2.isDefined)
+      newTransformers
+        .map(ct => ct.makeTransformation(rowMap))
 
     val deltaTransformations = if (revision.transformations.isEmpty) {
-      newTransformations.map(a => (Some(a._1), a._2))
+      newTransformations.map(Some(_))
     } else {
       revision.transformations
         .zip(newTransformations)
         .map {
-          case (oldTransformation, (oldTransformer, Some(newTransformation)))
+          case (oldTransformation, newTransformation)
               if oldTransformation.isSupersededBy(newTransformation) =>
-            (Some(oldTransformer), Some(oldTransformation.merge(newTransformation)))
-          case _ => (None, None)
+            Some(oldTransformation.merge(newTransformation))
+          case _ => None
         }
+    }
+
+    val deltaTransformers = revision.columnTransformers.zip(newTransformers).map {
+      case (oldTransformer, newTransformer) if oldTransformer == newTransformer => None
+      case (_, newTransformer) => Some(newTransformer)
     }
 
     if (deltaTransformations.isEmpty) {
       None
     } else {
-      val (transformerDelta, transformationDelta) = deltaTransformations.unzip
       Some(
         RevisionChange(
           supersededRevision = revision,
           timestamp = System.currentTimeMillis(),
-          columnTransformersChanges = transformerDelta,
-          transformationsChanges = transformationDelta))
+          columnTransformersChanges = deltaTransformers,
+          transformationsChanges = deltaTransformations))
 
     }
 

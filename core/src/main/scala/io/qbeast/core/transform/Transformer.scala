@@ -133,11 +133,18 @@ trait Transformer extends Serializable {
   def stats: ColumnStats
 
   /**
+   * Returns wether the transformation is identity or not
+   * @param row the values
+   * @return the transformation
+   */
+  def isIdentityTransformation(row: String => Any): Boolean
+
+  /**
    * Returns the Transformation given a row representation of the values
    * @param row the values
    * @return the transformation
    */
-  def maybeMakeTransformation(row: String => Any): Option[Transformation]
+  def makeTransformation(row: String => Any): Transformation
 
   /**
    * Returns the new Transformation if the space has changed
@@ -149,15 +156,15 @@ trait Transformer extends Serializable {
   def maybeUpdateTransformation(
       currentTransformation: Transformation,
       row: Map[String, Any]): Option[Transformation] = {
-    val possibleDataTransformation = maybeMakeTransformation(row)
-    possibleDataTransformation match {
-      case Some(newDataTransformation) =>
-        if (currentTransformation.isSupersededBy(newDataTransformation)) {
-          Some(currentTransformation.merge(newDataTransformation))
-        } else {
-          None
-        }
-      case None => None
+    if (isIdentityTransformation(row.get)) {
+      None
+    } else {
+      val newDataTransformation = makeTransformation(row.get)
+      if (currentTransformation.isSupersededBy(newDataTransformation)) {
+        Some(currentTransformation.merge(newDataTransformation))
+      } else {
+        None
+      }
     }
   }
 

@@ -120,7 +120,8 @@ class DoublePassOTreeDataAnalyzerTest extends QbeastIntegrationTestSpec {
     revisionChanges.get.supersededRevision shouldBe emptyRevision
     revisionChanges.get.transformationsChanges.count(_.isDefined) shouldBe columnsToIndex.length
     revisionChanges.get.desiredCubeSizeChange shouldBe None
-    revisionChanges.get.columnTransformersChanges shouldBe Vector.empty
+    revisionChanges.get.columnTransformersChanges shouldBe
+      Vector.fill(columnTransformers.size)(None)
 
     val revision = revisionChanges.get.createNewRevision
 
