@@ -10,6 +10,8 @@ import org.scalatest.PrivateMethodTester
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import io.qbeast.TestClasses._
+import io.qbeast.core.model.{LongDataType}
+import io.qbeast.core.transform.LinearTransformer
 
 class NewRevisionTest
     extends AnyFlatSpec
@@ -126,5 +128,53 @@ class NewRevisionTest
         qbeastSnapshot.loadLatestRevision.desiredCubeSize shouldBe cubeSize2
       }
   }
+
+  it should "drop column when all values are NULL" in withSparkAndTmpDir((spark, tmpDir) => {
+    val rdd =
+      spark.sparkContext.parallelize(
+        Seq(
+          Client4(1, s"student-1", None, Some(1000 + 123), Some(2567.3432143)),
+          Client4(2, s"student-2", None, Some(2 * 1000 + 123), Some(2 * 2567.3432143))))
+
+    val df = spark.createDataFrame(rdd)
+    val names = List("age", "val2")
+
+    df.write
+      .format("qbeast")
+      .mode("overwrite")
+      .options(Map("columnsToIndex" -> names.mkString(",")))
+      .save(tmpDir)
+
+    val deltaLog = DeltaLog.forTable(spark, tmpDir)
+    val qbeastSnapshot = delta.DeltaQbeastSnapshot(deltaLog.snapshot)
+
+    qbeastSnapshot.loadLatestRevision.columnTransformers shouldBe Seq(
+      LinearTransformer("val2", LongDataType))
+
+  })
+
+  it should "drop column when all values are the same" in withSparkAndTmpDir((spark, tmpDir) => {
+    val rdd =
+      spark.sparkContext.parallelize(
+        Seq(
+          Client4(1, s"student-1", Some(1), Some(1000 + 123), Some(2567.3432143)),
+          Client4(2, s"student-2", Some(1), Some(2 * 1000 + 123), Some(2 * 2567.3432143))))
+
+    val df = spark.createDataFrame(rdd)
+    val names = List("age", "val2")
+
+    df.write
+      .format("qbeast")
+      .mode("overwrite")
+      .options(Map("columnsToIndex" -> names.mkString(",")))
+      .save(tmpDir)
+
+    val deltaLog = DeltaLog.forTable(spark, tmpDir)
+    val qbeastSnapshot = delta.DeltaQbeastSnapshot(deltaLog.snapshot)
+
+    qbeastSnapshot.loadLatestRevision.columnTransformers shouldBe Seq(
+      LinearTransformer("val2", LongDataType))
+
+  })
 
 }

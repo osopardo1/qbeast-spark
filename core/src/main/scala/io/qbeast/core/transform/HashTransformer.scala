@@ -16,10 +16,10 @@ case class HashTransformer(
 
   override def stats: ColumnStats = NoColumnStats
 
-  override def makeTransformation(row: String => Any): Transformation = {
+  override def maybeMakeTransformation(row: String => Any): Option[Transformation] = {
     optionalNullValue match {
-      case Some(nullValue) => HashTransformation(nullValue)
-      case None => HashTransformation()
+      case Some(nullValue) => Some(HashTransformation(nullValue))
+      case None => Some(HashTransformation())
     }
   }
 

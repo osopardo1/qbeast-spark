@@ -150,9 +150,8 @@ private[table] class IndexedTableImpl(
           latestIndexStatus
         } else {
           val oldRevisionID = latestIndexStatus.revision.revisionID
-          val newRevision = revisionBuilder
-            .createNextRevision(tableID, data.schema, parameters, oldRevisionID)
-          IndexStatus(newRevision)
+          val newRevision = revisionBuilder.createNewRevision(tableID, data.schema, parameters)
+          IndexStatus(newRevision.copy(revisionID = oldRevisionID + 1))
         }
       } else {
         IndexStatus(revisionBuilder.createNewRevision(tableID, data.schema, parameters))

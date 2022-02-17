@@ -3,7 +3,7 @@
  */
 package io.qbeast.spark.index
 
-import io.qbeast.core.model.{QDataType, QTableID, Revision, RevisionFactory, RevisionID}
+import io.qbeast.core.model.{QDataType, QTableID, Revision, RevisionFactory}
 import io.qbeast.spark.internal.QbeastOptions
 import io.qbeast.spark.utils.SparkToQTypesUtils
 import io.qbeast.core.transform.Transformer
@@ -42,15 +42,6 @@ object SparkRevisionFactory extends RevisionFactory[StructType] {
     }.toVector
 
     Revision.firstRevision(qtableID, desiredCubeSize, transformers)
-  }
-
-  override def createNextRevision(
-      qtableID: QTableID,
-      schema: StructType,
-      options: Map[String, String],
-      oldRevisionID: RevisionID): Revision = {
-    val revision = createNewRevision(qtableID, schema, options)
-    revision.copy(revisionID = oldRevisionID + 1)
   }
 
 }

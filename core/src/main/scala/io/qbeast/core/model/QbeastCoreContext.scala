@@ -40,18 +40,4 @@ trait RevisionFactory[DataSchema] {
       schema: DataSchema,
       options: Map[String, String]): Revision
 
-  /**
-   * Create a new revision with given parameters from an old revision
-   * @param qtableID the table identifier
-   * @param schema the schema
-   * @param options the options
-   * @param oldRevision the old revision
-   * @return
-   */
-  def createNextRevision(
-      qtableID: QTableID,
-      schema: DataSchema,
-      options: Map[String, String],
-      oldRevision: RevisionID): Revision
-
 }

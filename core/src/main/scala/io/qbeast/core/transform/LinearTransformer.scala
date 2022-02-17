@@ -67,12 +67,13 @@ case class LinearTransformer(
       statsNames = Seq(colMax, colMin),
       statsSqlPredicates = Seq(s"max($columnName) AS $colMax", s"min($columnName) AS $colMin"))
 
-  override def makeTransformation(row: String => Any): Transformation = {
+  override def maybeMakeTransformation(row: String => Any): Option[Transformation] = {
     val minAux = row(colMin)
     val maxAux = row(colMax)
-    if (minAux == null && maxAux == null) {
-      throw new RuntimeException(s"Column $columnName has only null values")
-    }
+    // If all the values are null
+    // or the user is trying to index a column with a single value
+    // then we should drop the transformation
+    if (minAux == null && maxAux == null || minAux == maxAux) return None
 
     val min = getValue(minAux)
     val max = getValue(maxAux)
@@ -80,7 +81,8 @@ case class LinearTransformer(
     val nullValue = getValue(nullAux)
     dataType match {
       case ordered: OrderedDataType =>
-        LinearTransformation(min, max, nullValue, ordered)
+        Some(LinearTransformation(min, max, nullValue, ordered))
+      case _ => None
 
     }
   }

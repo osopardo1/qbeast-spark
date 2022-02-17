@@ -137,7 +137,7 @@ trait Transformer extends Serializable {
    * @param row the values
    * @return the transformation
    */
-  def makeTransformation(row: String => Any): Transformation
+  def maybeMakeTransformation(row: String => Any): Option[Transformation]
 
   /**
    * Returns the new Transformation if the space has changed
@@ -149,11 +149,15 @@ trait Transformer extends Serializable {
   def maybeUpdateTransformation(
       currentTransformation: Transformation,
       row: Map[String, Any]): Option[Transformation] = {
-    val newDataTransformation = makeTransformation(row)
-    if (currentTransformation.isSupersededBy(newDataTransformation)) {
-      Some(currentTransformation.merge(newDataTransformation))
-    } else {
-      None
+    val possibleDataTransformation = maybeMakeTransformation(row)
+    possibleDataTransformation match {
+      case Some(newDataTransformation) =>
+        if (currentTransformation.isSupersededBy(newDataTransformation)) {
+          Some(currentTransformation.merge(newDataTransformation))
+        } else {
+          None
+        }
+      case None => None
     }
   }
 
