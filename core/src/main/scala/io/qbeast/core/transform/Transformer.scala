@@ -156,15 +156,12 @@ trait Transformer extends Serializable {
   def maybeUpdateTransformation(
       currentTransformation: Transformation,
       row: Map[String, Any]): Option[Transformation] = {
-    if (isIdentityTransformation(row.get)) {
-      None
+    if (isIdentityTransformation(row)) return None
+    val newDataTransformation = makeTransformation(row)
+    if (currentTransformation.isSupersededBy(newDataTransformation)) {
+      Some(currentTransformation.merge(newDataTransformation))
     } else {
-      val newDataTransformation = makeTransformation(row.get)
-      if (currentTransformation.isSupersededBy(newDataTransformation)) {
-        Some(currentTransformation.merge(newDataTransformation))
-      } else {
-        None
-      }
+      None
     }
   }
 
