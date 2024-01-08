@@ -75,17 +75,16 @@ case class OTreeIndex(index: TahoeLogFileIndex)
   }
 
   /**
-   * Collect matching staging files from _delta_log and convert them into FileStatuses.
+   * Collect matching files from _delta_log and convert them into FileStatuses.
    * The output is merged with those built from QbeastBlocks.
    * @return
    */
-  private def stagingFiles(
+  private def deltaMatchingFiles(
       partitionFilters: Seq[Expression],
       dataFilters: Seq[Expression]): Seq[FileStatus] = {
 
     index
       .matchingFiles(partitionFilters, dataFilters)
-      .filter(isStagingFile)
       .map { f =>
         new FileStatus(
           /* length */ f.size,
@@ -104,9 +103,9 @@ case class OTreeIndex(index: TahoeLogFileIndex)
     // FILTER FILES FROM QBEAST
     val qbeastFileStats = qbeastMatchingFiles(partitionFilters, dataFilters)
     // FILTER FILES FROM DELTA
-    val stagingFileStats = stagingFiles(partitionFilters, dataFilters)
+    val deltaFileStats = deltaMatchingFiles(partitionFilters, dataFilters)
     // JOIN BOTH FILTERED FILES
-    val fileStats = qbeastFileStats ++ stagingFileStats
+    val fileStats = (qbeastFileStats ++ deltaFileStats).distinct
 
     val sc = index.spark.sparkContext
     val execId = sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
