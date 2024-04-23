@@ -19,8 +19,12 @@ import io.qbeast.spark.index.query.QueryFiltersUtils
 import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.delta.actions.Metadata
+import org.apache.spark.sql.delta.actions.Protocol
+import org.apache.spark.sql.delta.files.SupportsRowIndexFilters
 import org.apache.spark.sql.delta.files.TahoeLogFileIndex
 import org.apache.spark.sql.delta.DeltaLog
+import org.apache.spark.sql.delta.SnapshotDescriptor
 import org.apache.spark.sql.execution.datasources.FileIndex
 import org.apache.spark.sql.execution.datasources.PartitionDirectory
 import org.apache.spark.sql.execution.SQLExecution
@@ -37,6 +41,7 @@ class DefaultFileIndex private (target: TahoeLogFileIndex)
     extends FileIndex
     with QueryFiltersUtils
     with Logging
+    with SupportsRowIndexFilters
     with Serializable {
 
   override def rootPaths: Seq[Path] = target.rootPaths
