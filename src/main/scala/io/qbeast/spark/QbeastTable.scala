@@ -24,8 +24,10 @@ import io.qbeast.spark.delta.DeltaQbeastSnapshot
 import io.qbeast.spark.internal.commands.AnalyzeTableCommand
 import io.qbeast.spark.internal.commands.CompactTableCommand
 import io.qbeast.spark.internal.commands.OptimizeTableCommand
+import io.qbeast.spark.internal.sources.catalog.QbeastTableIdentifier
 import io.qbeast.spark.table._
 import io.qbeast.spark.utils.IndexMetrics
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.delta.DeltaLog
 import org.apache.spark.sql.AnalysisExceptionFactory
 import org.apache.spark.sql.Dataset
@@ -244,6 +246,21 @@ object QbeastTable {
 
   def forPath(sparkSession: SparkSession, path: String): QbeastTable = {
     new QbeastTable(sparkSession, new QTableID(path), QbeastContext.indexedTableFactory)
+  }
+
+  def forTable(sparkSession: SparkSession, tableIdentifier: TableIdentifier): QbeastTable = {
+
+    val isQbeastTablePath = QbeastTableIdentifier.isQbeastPath(sparkSession, tableIdentifier)
+    if (isQbeastTablePath) {
+      val qbeastTableIdentifier = QbeastTableIdentifier(sparkSession, tableIdentifier)
+      return new QbeastTable(sparkSession, new QTableID(qbeastTableIdentifier.path.get), QbeastContext.indexedTableFactory)
+    }
+    new QbeastTable(sparkSession, new QTableID(tableLocation), QbeastContext.indexedTableFactory)
+  }
+
+  def forTable(sparkSession: SparkSession, tableName: String): QbeastTable = {
+    val tableIdentifier = TableIdentifier(tableName)
+    forTable(sparkSession, tableIdentifier)
   }
 
 }

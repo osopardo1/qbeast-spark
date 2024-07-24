@@ -72,6 +72,9 @@ object QbeastCatalogUtils {
   def isQbeastProvider(properties: util.Map[String, String]): Boolean = isQbeastProvider(
     properties.asScala.toMap)
 
+  def isQbeastProvider(catalogTable: CatalogTable): Boolean = isQbeastProvider(
+    catalogTable.provider)
+
   /**
    * Checks if an Identifier is set with a path
    * @param ident
