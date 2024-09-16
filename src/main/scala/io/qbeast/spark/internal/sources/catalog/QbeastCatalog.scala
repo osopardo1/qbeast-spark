@@ -101,12 +101,16 @@ class QbeastCatalog[T <: TableCatalog with SupportsNamespaces with FunctionCatal
       }
     } catch {
       case _: NoSuchDatabaseException | _: NoSuchNamespaceException | _: NoSuchTableException
-          if QbeastCatalogUtils.isPathTable(ident) =>
+          if QbeastCatalogUtils.isPathTable(ident) && QbeastCatalogUtils.isQbeastProvider(
+            ident.namespace().headOption) =>
         QbeastTableImpl(
           TableIdentifier(ident.name(), ident.namespace().headOption),
           new Path(ident.name()),
           Map.empty,
           tableFactory = tableFactory)
+
+      case _: Throwable => // Other cases are handled by the session catalog
+        getSessionCatalog().loadTable(ident)
     }
   }
 

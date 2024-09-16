@@ -239,4 +239,18 @@ class QbeastSQLIntegrationTest extends QbeastIntegrationTestSpec {
       }
   }
 
+  it should "support syntax with absolute path" in withQbeastContextSparkAndTmpWarehouse(
+    (spark, tmpWarehouse) => {
+
+      val location = s"${tmpWarehouse}/test1"
+      spark.range(10).write.format("delta").save(location)
+      spark.sql(s"SELECT * FROM delta.`$location`")
+      // org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException: [SCHEMA_NOT_FOUND] The schema `delta` cannot be found. Verify the spelling and correctness of the schema and catalog.
+
+      val locationQbeast = s"${tmpWarehouse}/test2"
+      // I get the same results If I create the in Qbeast
+      spark.range(10).write.format("qbeast").option("columnsToIndex", "id").save(locationQbeast)
+      spark.sql(s"SELECT * FROM qbeast.`$locationQbeast`")
+    })
+
 }
