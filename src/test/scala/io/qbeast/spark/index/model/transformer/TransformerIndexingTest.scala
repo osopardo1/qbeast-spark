@@ -350,4 +350,43 @@ class TransformerIndexingTest extends AnyFlatSpec with Matchers with QbeastInteg
 
     })
 
+  it should "index table with all bigint" in withQbeastContextSparkAndTmpWarehouse(
+    (spark, tmpWarehouse) => {
+      import spark.implicits._
+      val transformedTimestamps =
+        Seq(1727576294425L, 1727573413393L, 1727575303653L, 1727573943159L, 1727574359221L,
+          1727559190306L, 1727559235931L, 1727559841937L, 1727559870441L, 1727569279499L).toDF(
+          "date")
+      val identityTimestamps = Seq.fill(10000)(1729429674924L).toDF("date")
+
+      transformedTimestamps
+        .union(identityTimestamps)
+        .write
+        .format("delta")
+        .saveAsTable("allTransformedTimestamps")
+
+      transformedTimestamps.createOrReplaceTempView("transformedTimestamps")
+
+      spark.sql("""CREATE OR REPLACE TABLE test_bigint (value BIGINT)
+          |USING qbeast
+          |OPTIONS (columnsToIndex 'value', cubeSize '100')""".stripMargin)
+
+      import io.qbeast.spark.QbeastTable
+      val tableIdentifier = org.apache.spark.sql.catalyst.TableIdentifier("test_bigint")
+      val tableMetadata = spark.sessionState.catalog.getTableMetadata(tableIdentifier)
+      val location = tableMetadata.location.toString
+      println(s"Table location: $location")
+      val qbeastTable = QbeastTable.forPath(spark, location)
+      println("REVISION")
+      println(qbeastTable.latestRevision.toString)
+
+      spark.sql("INSERT INTO test_bigint SELECT * FROM allTransformedTimestamps LIMIT 1")
+      println("REVISION AFTER")
+      println(qbeastTable.latestRevision.toString)
+
+      val indexed = spark.sql("SELECT * FROM test_bigint")
+      indexed.count() shouldBe 1
+
+    })
+
 }
