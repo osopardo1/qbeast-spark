@@ -20,16 +20,21 @@ import io.qbeast.core.model._
 import io.qbeast.core.model.RevisionFactory
 import io.qbeast.spark.delta.StagingDataManager
 import io.qbeast.spark.delta.StagingResolution
+import io.qbeast.spark.index.DoublePassOTreeDataAnalyzer
 import io.qbeast.spark.internal.sources.QbeastBaseRelation
 import io.qbeast.spark.internal.QbeastOptions
 import io.qbeast.spark.internal.QbeastOptions.checkQbeastProperties
 import io.qbeast.spark.internal.QbeastOptions.optimizationOptions
 import io.qbeast.spark.internal.QbeastOptions.COLUMNS_TO_INDEX
 import io.qbeast.spark.internal.QbeastOptions.CUBE_SIZE
+import io.qbeast.IISeq
 import org.apache.spark.internal.Logging
 import org.apache.spark.qbeast.config.COLUMN_SELECTOR_ENABLED
 import org.apache.spark.qbeast.config.DEFAULT_NUMBER_OF_RETRIES
+import org.apache.spark.sql.delta.actions.AddFile
 import org.apache.spark.sql.delta.actions.FileAction
+import org.apache.spark.sql.delta.actions.RemoveFile
+import org.apache.spark.sql.delta.DeltaFileProviderUtils
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.AnalysisExceptionFactory
@@ -130,23 +135,21 @@ trait IndexedTable {
   def optimize(revisionID: RevisionID, fraction: Double, options: Map[String, String]): Unit
 
   /**
-   * Optimizes the given table for a given revision
-   * @param revisionID
-   *   the identifier of revision to optimize
-   * @param options
-   *   Optimization options where user metadata and pre-commit hooks are specified.
-   */
-  def optimize(revisionID: RevisionID, options: Map[String, String]): Unit
-
-  /**
    * Optimizes the table by optimizing the data stored in the specified index files.
    *
-   * @param files
+   * @param indexFiles
    *   the index files to optimize
    * @param options
    *   Optimization options where user metadata and pre-commit hooks are specified.
    */
-  def optimize(files: Seq[String], options: Map[String, String]): Unit
+  def optimizeIndexedFiles(indexFiles: Seq[String], options: Map[String, String]): Unit
+
+  /**
+   * Optimizes the table by optimizing the data stored in the specified unindexed files.
+   * @param unindexedFiles
+   * @param options
+   */
+  def optimizeUnindexedFiles(unindexedFiles: Seq[String], options: Map[String, String]): Unit
 }
 
 /**
@@ -491,15 +494,62 @@ private[table] class IndexedTableImpl(
 
   }
 
+  /**
+   * Selects the unindexed files to optimize based on the fraction
+   * @param fraction
+   *   the fraction of the data to optimize
+   * @return
+   */
+  private[table] def selectUnindexedFilesToOptimize(fraction: Double): Seq[String] = {
+    val revisionFilesDS = snapshot.loadIndexFiles(stagingID)
+    // 1. Collect the revision files ordered by modification time
+    val revisionFiles = revisionFilesDS.orderBy("modificationTime").collect()
+    log.info(s"Total Number of Unindexed Files:  ${revisionFiles.size}")
+    // 2. Calculate the total bytes of the files to optimize based on the fraction
+    val bytesToOptimize = revisionFiles.map(_.size).sum * fraction
+    logInfo(s"Total Bytes of Unindexed Files to Optimize: $bytesToOptimize")
+    // 3. Accumulate the files to optimize until the bytesToOptimize is reached
+    val filesToOptimize = Seq.newBuilder[String]
+    revisionFiles.foldLeft(0L)((acc, file) => {
+      if (acc < bytesToOptimize) {
+        filesToOptimize += file.path
+        acc + file.size
+      } else acc
+    })
+    val filesToOptimizeNames = filesToOptimize.result()
+    logInfo(s"Total Number of Unindexed Files to Optimize: ${filesToOptimizeNames.size}")
+    filesToOptimizeNames
+  }
+
+  /**
+   * Selects the indexed files to optimize based on the fraction
+   * @param revisionID
+   * @param fraction
+   * @return
+   */
+  private[table] def selectIndexedFilesToOptimize(
+      revisionID: RevisionID,
+      fraction: Double): Seq[String] = {
+    val revisionFilesDS = snapshot.loadIndexFiles(revisionID)
+    import revisionFilesDS.sparkSession.implicits._
+    val filesToOptimize = revisionFilesDS.transform(filterSamplingFiles(fraction))
+    val filesToOptimizeNames = filesToOptimize.map(_.path).collect()
+    logInfo(s"Total Number of Indexed Files To Optimize: ${filesToOptimizeNames.size}")
+    filesToOptimizeNames
+  }
+
   override def optimize(
       revisionID: RevisionID,
       fraction: Double,
       options: Map[String, String]): Unit = {
     assert(fraction > 0d && fraction <= 1d)
-    val indexFiles = snapshot.loadIndexFiles(revisionID)
-    import indexFiles.sparkSession.implicits._
-    val files = indexFiles.transform(filterSamplingFiles(fraction)).map(_.path).collect()
-    optimize(files, options)
+    log.info(s"Selecting Files to Optimize for Revision $revisionID")
+    // Filter the Index Files by the fraction
+    if (isStaging(revisionID)) { // If the revision is Staging, we should INDEX the staged data up to the fraction
+      optimizeUnindexedFiles(selectUnindexedFilesToOptimize(fraction), options)
+    } else { // If the revision is not Staging, we should optimize the index files up to the fraction
+      optimizeIndexedFiles(selectIndexedFilesToOptimize(revisionID, fraction), options)
+    }
   }
 
   private[table] def filterSamplingFiles(
@@ -511,10 +561,48 @@ private[table] class IndexedTableImpl(
     }
   }
 
-  override def optimize(revisionID: RevisionID, options: Map[String, String]): Unit =
-    optimize(revisionID, 1.0, options)
+  override def optimizeUnindexedFiles(
+      unindexedFiles: Seq[String],
+      options: Map[String, String]): Unit = {
+    val unindexedFilesPaths = unindexedFiles.toSet
+    if (unindexedFilesPaths.isEmpty) return // Nothing to optimize
+    // 1. Load the files from the Staging ID (Unindexed)
+    val files =
+      snapshot.loadIndexFiles(stagingID).filter(f => unindexedFilesPaths.contains(f.path))
+    import files.sparkSession.implicits._
+    // 2. Load the Dataframe, the latest index status and the schema
+    val filesDF = snapshot.loadDataframeFromIndexFiles(files)
+    val latestIndexStatus = snapshot.loadLatestIndexStatus
+    val schema = metadataManager.loadCurrentSchema(tableID)
+    // 3. In a transaction, update the table with the new data
+    metadataManager.updateWithTransaction(
+      tableID,
+      schema,
+      optimizationOptions(options),
+      append = true) {
+      // Remove the Unindexed Files from the Log
+      val deleteFiles: IISeq[RemoveFile] = RemoveFile.fromIndexFiles(files)
+      // Index the data with IndexManager
+      val (data, tableChanges) = indexManager.index(filesDF, latestIndexStatus)
+      // Write the data with DataWriter
+      val newFiles: IISeq[AddFile] =
+        dataWriter
+          .write(tableID, schema, data, tableChanges)
+          .collect { case addFile: AddFile =>
+            addFile.copy(dataChange = false)
+          }
+          .toIndexedSeq
 
-  override def optimize(files: Seq[String], options: Map[String, String]): Unit = {
+      val fileActions = newFiles ++ deleteFiles
+      // Commit
+      (tableChanges, fileActions)
+    }
+  }
+
+  override def optimizeIndexedFiles(
+      revisionID: RevisionID,
+      files: Seq[String],
+      options: Map[String, String]): Unit = {
     val paths = files.toSet
     val schema = metadataManager.loadCurrentSchema(tableID)
     snapshot.loadAllRevisions.foreach { revision =>

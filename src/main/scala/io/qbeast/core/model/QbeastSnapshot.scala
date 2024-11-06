@@ -16,6 +16,7 @@
 package io.qbeast.core.model
 
 import io.qbeast.IISeq
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Dataset
 
 /**
@@ -110,5 +111,13 @@ trait QbeastSnapshot {
    *   the revision
    */
   def loadRevisionAt(timestamp: Long): Revision
+
+  /**
+   * Loads the DataFrame from a set of index files
+   * @param indexFiles
+   *   the index files Dataset
+   * @return
+   */
+  def loadDataframeFromIndexFiles(indexFiles: Dataset[IndexFile]): DataFrame
 
 }

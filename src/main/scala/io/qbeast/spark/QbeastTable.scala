@@ -50,8 +50,19 @@ class QbeastTable private (
     DeltaQbeastSnapshot(snapshot)
   }
 
+  /**
+   * The IndexedTable representation of the Table
+   * @return
+   */
   private def indexedTable: IndexedTable = indexedTableFactory.getIndexedTable(tableID)
 
+  /**
+   * Checks if the revision is available in the table.
+   *
+   * If the revision is not available, or is not the staging revision, an exception is thrown.
+   * @param revisionID
+   *   the revision to check
+   */
   private def checkRevisionAvailable(revisionID: RevisionID): Unit = {
     if (!qbeastSnapshot.existsRevision(revisionID)) {
       throw AnalysisExceptionFactory.create(
@@ -122,10 +133,8 @@ class QbeastTable private (
    *   Optimization options where user metadata and pre-commit hooks are specified.
    */
   def optimize(revisionID: RevisionID, fraction: Double, options: Map[String, String]): Unit = {
-    if (!isStaging(revisionID)) {
-      checkRevisionAvailable(revisionID)
-      OptimizeTableCommand(revisionID, fraction, indexedTable, options).run(sparkSession)
-    }
+    checkRevisionAvailable(revisionID)
+    OptimizeTableCommand(revisionID, fraction, indexedTable, options).run(sparkSession)
   }
 
   def optimize(revisionID: RevisionID, fraction: Double): Unit = {
@@ -165,8 +174,35 @@ class QbeastTable private (
    * @param options
    *   Optimization options where user metadata and pre-commit hooks are specified.
    */
-  def optimize(files: Seq[String], options: Map[String, String]): Unit =
-    indexedTable.optimize(files, options)
+  def optimize(files: Seq[String], options: Map[String, String]): Unit = {
+    import sparkSession.implicits._
+
+    // 1. Get the current Table Files grouped by revision
+    val currentTableFilesByRevision = qbeastSnapshot.loadAllRevisions
+      .map(revision =>
+        revision.revisionID -> qbeastSnapshot.loadIndexFiles(revision.revisionID).collect())
+      .toMap
+    // 2. Filter the files to optimize for each RevisionID
+    val filesToOptimizeByRevision: Map[RevisionID, Array[String]] =
+      currentTableFilesByRevision.map { case (revisionID, indexFiles) =>
+        val filesToOptimize = indexFiles
+          .filter(indexFile => files.contains(indexFile.path))
+          .map(_.path)
+        revisionID -> filesToOptimize
+      }
+
+    // 3. Optimize the files for each RevisionID.
+    //
+    // If the RevisionID is the staging one, call optimizeUnindexedFiles
+    //   otherwise call optimizeIndexedFiles
+    filesToOptimizeByRevision.foreach {
+      case (revisionID, filesToOptimize) if (revisionID == stagingID) =>
+        indexedTable.optimizeUnindexedFiles(filesToOptimize, options)
+      case (_, filesToOptimize) if (filesToOptimize.isEmpty) =>
+        indexedTable.optimizeIndexedFiles(filesToOptimize, options)
+    }
+
+  }
 
   def optimize(files: Seq[String]): Unit =
     optimize(files, Map.empty[String, String])
