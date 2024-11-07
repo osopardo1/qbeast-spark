@@ -94,11 +94,11 @@ object DoublePassOTreeDataAnalyzer extends OTreeDataAnalyzer with Serializable w
     val columnStats = columnTransformers.map(_.stats)
     val columnsExpr = columnStats.flatMap(_.statsSqlPredicates)
     logInfo("Selecting statistics for columns: " + columnsExpr.mkString(", "))
-    val row = data.selectExpr(columnsExpr ++ Seq("count(1) AS count"): _*).first()
-    println("DATAFRAME COUNT")
-    println(data.count())
+    val isDeterministic = data.
+    val query = data.selectExpr(columnsExpr ++ Seq("count(1) AS count"): _*)
+    val row = query.first()
     println("SELECT EXPR PLAN")
-    data.selectExpr(columnsExpr ++ Seq("count(1) AS count"): _*).explain(true)
+    query.explain(true)
     logInfo("Statistics selected: " + row.mkString(", "))
     row
   }

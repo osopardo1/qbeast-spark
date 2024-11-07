@@ -350,22 +350,28 @@ class TransformerIndexingTest extends AnyFlatSpec with Matchers with QbeastInteg
 
     })
 
-  it should "index table with all bigint" in withQbeastContextSparkAndTmpWarehouse(
+  it should "index table using complect SELECT AS" in withQbeastContextSparkAndTmpWarehouse(
     (spark, tmpWarehouse) => {
       import spark.implicits._
-      val transformedTimestamps =
-        Seq(1727576294425L, 1727573413393L, 1727575303653L, 1727573943159L, 1727574359221L,
-          1727559190306L, 1727559235931L, 1727559841937L, 1727559870441L, 1727569279499L).toDF(
-          "date")
-      val identityTimestamps = Seq.fill(10000)(1729429674924L).toDF("date")
+      val originalTimestamps = Seq(
+        "2024-09-29T04:18:14.425Z",
+        "2024-09-29T03:30:13.393Z",
+        "2024-09-29T04:01:43.653Z",
+        "2024-09-29T03:39:03.159Z",
+        "2024-09-29T03:45:59.221Z",
+        "2024-09-28T23:33:10.306Z",
+        "2024-09-28T23:33:55.931Z",
+        "2024-09-28T23:44:01.937Z",
+        "2024-09-28T23:44:30.441Z",
+        "2024-09-29T02:21:19.499Z").toDF("date")
+      val identityTimestamps = Seq.fill(10000)("2024-09-29T04:18:14.425Z").toDF("date")
 
-      transformedTimestamps
+      val allTimestamps = originalTimestamps
         .union(identityTimestamps)
-        .write
-        .format("delta")
-        .saveAsTable("allTransformedTimestamps")
 
-      transformedTimestamps.createOrReplaceTempView("transformedTimestamps")
+      allTimestamps.write
+        .format("delta")
+        .saveAsTable("allTimestamps")
 
       spark.sql("""CREATE OR REPLACE TABLE test_bigint (value BIGINT)
           |USING qbeast
@@ -380,12 +386,16 @@ class TransformerIndexingTest extends AnyFlatSpec with Matchers with QbeastInteg
       println("REVISION")
       println(qbeastTable.latestRevision.toString)
 
-      spark.sql("INSERT INTO test_bigint SELECT * FROM allTransformedTimestamps LIMIT 1")
+      spark.sql("""INSERT INTO test_bigint
+          |SELECT CAST((unix_timestamp(to_timestamp(date, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")) * 1000
+          | + SUBSTRING(date, 21, 3)) AS BIGINT) AS timestamp_bigint
+          |FROM allTimestamps""".stripMargin)
+
       println("REVISION AFTER")
       println(qbeastTable.latestRevision.toString)
 
       val indexed = spark.sql("SELECT * FROM test_bigint")
-      indexed.count() shouldBe 1
+      indexed.count() shouldBe 10010
 
     })
 
