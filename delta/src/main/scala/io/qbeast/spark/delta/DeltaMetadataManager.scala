@@ -54,7 +54,7 @@ object DeltaMetadataManager extends MetadataManager {
   }
 
   override def loadSnapshot(tableID: QTableID): DeltaQbeastSnapshot = {
-    DeltaQbeastSnapshot(tableID)
+    DeltaQbeastSnapshot(tableID, loadDeltaLog(tableID).update())
   }
 
   override def loadCurrentSchema(tableID: QTableID): StructType = {
@@ -109,6 +109,25 @@ object DeltaMetadataManager extends MetadataManager {
    */
   override def createLog(tableID: QTableID): Unit = {
     loadDeltaLog(tableID).createLogDirectory()
+  }
+
+  /**
+   * Gets the Snapshot for a given table at a given timestamp
+   *
+   * @param tableID
+   * @param timestamp
+   * @return
+   */
+  override def loadSnapshotAt(tableID: QTableID, timestamp: RevisionID): QbeastSnapshot = {
+    val deltaSnapshot = loadDeltaLog(tableID).update(
+      stalenessAcceptable = true,
+      checkIfUpdatedSinceTs = Some(timestamp))
+    DeltaQbeastSnapshot(tableID, deltaSnapshot)
+  }
+
+  override def loadSnapshotAtVersion(tableID: QTableID, version: RevisionID): QbeastSnapshot = {
+    val deltaSnapshot = loadDeltaLog(tableID).getSnapshotAt(version)
+    DeltaQbeastSnapshot(tableID, deltaSnapshot)
   }
 
 }

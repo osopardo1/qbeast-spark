@@ -366,6 +366,8 @@ object DoublePassOTreeDataAnalyzer extends OTreeDataAnalyzer with Serializable w
     // Compute the statistics for the indexedColumns
     val columnTransformers = indexStatus.revision.columnTransformers
     val dataFrameStats = getDataFrameStats(dataFrame, columnTransformers)
+    println("DATAFRAME STATS COUNT")
+    println(dataFrame.count())
 
     val numElements = dataFrameStats.getAs[Long]("count")
     val spaceChanges =
@@ -381,6 +383,9 @@ object DoublePassOTreeDataAnalyzer extends OTreeDataAnalyzer with Serializable w
 
     // Add a random weight column
     val weightedDataFrame = dataFrame.transform(addRandomWeight(newRevision))
+
+    println("WEIGHTED DATAFRAME COUNT")
+    println(weightedDataFrame.count())
 
     // Compute partition-level cube domains
     val partitionCubeDomains: Dataset[CubeDomain] =

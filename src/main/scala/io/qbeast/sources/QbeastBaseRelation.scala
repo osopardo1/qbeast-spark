@@ -15,11 +15,13 @@
  */
 package io.qbeast.sources
 
-import io.qbeast.context.QbeastContext
+import io.qbeast.core.model.QbeastSnapshot
+import io.qbeast.spark.delta.DeltaQbeastSnapshot
 import io.qbeast.spark.index.DefaultFileIndex
 import io.qbeast.spark.index.EmptyFileIndex
 import io.qbeast.table.IndexedTable
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.delta.DeltaParquetFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.HadoopFsRelation
 import org.apache.spark.sql.sources.BaseRelation
@@ -27,7 +29,6 @@ import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.StructField
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.SparkSession
 
 /**
@@ -39,23 +40,19 @@ object QbeastBaseRelation {
    * Returns a HadoopFsRelation that contains all of the data present in the table. This relation
    * will be continually updated as files are added or removed from the table. However, new
    * HadoopFsRelation must be requested in order to see changes to the schema.
-   *
-   * @param sqlContext
-   *   the SQLContex
-   * @param table
-   *   the indexed table
+   * @param indexedTable
+   *   the IndexedTable
    * @param options
-   *   options
+   *   the options
    * @return
    *   the HadoopFsRelation
    */
   def createRelation(
-      sqlContext: SQLContext,
       table: IndexedTable,
-      options: Map[String, String]): BaseRelation = {
-
+      options: Map[String, String],
+      optSnapshot: Option[QbeastSnapshot] = None): BaseRelation = {
     val spark = SparkSession.active
-    val snapshot = QbeastContext.metadataManager.loadSnapshot(table.tableID)
+    val snapshot = if (optSnapshot.isDefined) optSnapshot.get else table.getCurrentSnapshot
     if (snapshot.isInitial) {
       // If the Table is initial, read empty relation
       // This could happen if we CREATE/REPLACE TABLE without inserting data
@@ -75,7 +72,9 @@ object QbeastBaseRelation {
       // If the table contains data, initialize it
       val qbeastFileIndex = DefaultFileIndex(snapshot)
       val bucketSpec: Option[BucketSpec] = None
-      val file = new ParquetFileFormat()
+      // TODO: DeltaParquetFileFormat should be replaced by the actual file format
+      val deltaSnapshot = snapshot.asInstanceOf[DeltaQbeastSnapshot].deltaSnapshot
+      val file = DeltaParquetFileFormat(deltaSnapshot.protocol, deltaSnapshot.metadata)
 
       // Verify and Merge options with existing indexed properties
       val parameters = table.verifyAndMergeProperties(options)
@@ -109,7 +108,7 @@ object QbeastBaseRelation {
   def forQbeastTableWithOptions(
       indexedTable: IndexedTable,
       withOptions: Map[String, String]): BaseRelation = {
-    createRelation(SparkSession.active.sqlContext, indexedTable, withOptions)
+    createRelation(indexedTable, withOptions)
   }
 
 }

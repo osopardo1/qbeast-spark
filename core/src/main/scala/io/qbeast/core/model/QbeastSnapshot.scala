@@ -30,6 +30,12 @@ import org.apache.spark.sql.Dataset
 trait QbeastSnapshot {
 
   /**
+   * The original snapshot from the underlying format.
+   * @return
+   */
+  def originalSnapshot: Any
+
+  /**
    * The base path of the table.
    */
   def basePath: Path

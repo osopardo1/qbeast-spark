@@ -24,9 +24,9 @@ import org.apache.spark.sql.Column
 import org.apache.spark.sql.Dataset
 
 private[delta] trait DeltaStagingUtils extends StagingUtils {
-  protected def snapshot: Snapshot
+  protected def deltaSnapshot: Snapshot
 
-  protected def isInitial: Boolean = snapshot.version == -1
+  protected def isInitial: Boolean = deltaSnapshot.version == -1
 
   /**
    * Condition for Staging AddFiles in the form of Spark sql Column
@@ -39,7 +39,7 @@ private[delta] trait DeltaStagingUtils extends StagingUtils {
    * @return
    */
   protected def stagingFiles(): Dataset[AddFile] = {
-    snapshot.allFiles.where(isStagingFileColumn)
+    deltaSnapshot.allFiles.where(isStagingFileColumn)
   }
 
   /**

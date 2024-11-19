@@ -25,7 +25,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.delta.actions.AddFile
 import org.apache.spark.sql.delta.files.TahoeLogFileIndex
-import org.apache.spark.sql.delta.DeltaLog
 import org.apache.spark.sql.delta.Snapshot
 import org.apache.spark.sql.execution.datasources.FileIndex
 import org.apache.spark.sql.execution.datasources.FileStatusWithMetadata
@@ -41,26 +40,29 @@ import org.apache.spark.sql.SparkSession
  *
  * @param tableID
  *   the table ID
+ * @param originalSnapshot
+ *   the original snapshot containing all the metadata from the underlying format
  */
-case class DeltaQbeastSnapshot(tableID: QTableID) extends QbeastSnapshot with DeltaStagingUtils {
+case class DeltaQbeastSnapshot(tableID: QTableID, override val originalSnapshot: Snapshot)
+    extends QbeastSnapshot
+    with DeltaStagingUtils {
 
   override val basePath: Path = new Path(tableID.id)
 
-  override val snapshot: Snapshot =
-    DeltaLog.forTable(SparkSession.active, tableID.id).update()
+  override lazy val deltaSnapshot: Snapshot = originalSnapshot
 
   /**
    * The current state of the snapshot.
    *
    * @return
    */
-  override def isInitial: Boolean = snapshot.version == -1
+  override def isInitial: Boolean = originalSnapshot.version == -1
 
-  override lazy val schema: StructType = snapshot.metadata.schema
+  override lazy val schema: StructType = originalSnapshot.metadata.schema
 
-  override lazy val allFilesCount: Long = snapshot.allFiles.count
+  override lazy val allFilesCount: Long = originalSnapshot.allFiles.count
 
-  private val metadataMap: Map[String, String] = snapshot.metadata.configuration
+  private val metadataMap: Map[String, String] = originalSnapshot.metadata.configuration
 
   /**
    * The current table properties of the snapshot.
@@ -70,13 +72,13 @@ case class DeltaQbeastSnapshot(tableID: QTableID) extends QbeastSnapshot with De
    * @return
    */
   override def loadProperties: Map[String, String] =
-    snapshot.getProperties.filterKeys(k => !k.startsWith(MetadataConfig.revision)).toMap
+    originalSnapshot.getProperties.filterKeys(k => !k.startsWith(MetadataConfig.revision)).toMap
 
   /**
    * The current table description.
    * @return
    */
-  override def loadDescription: String = snapshot.metadata.description
+  override def loadDescription: String = originalSnapshot.metadata.description
 
   /**
    * Constructs revision dictionary
@@ -158,7 +160,7 @@ case class DeltaQbeastSnapshot(tableID: QTableID) extends QbeastSnapshot with De
     val dimensionCount = loadRevision(revisionID).transformations.size
     val addFiles =
       if (isStaging(revisionID)) loadStagingFiles()
-      else snapshot.allFiles.where(TagColumns.revision === lit(revisionID.toString))
+      else originalSnapshot.allFiles.where(TagColumns.revision === lit(revisionID.toString))
     import addFiles.sparkSession.implicits._
     addFiles.map(DeltaQbeastFileUtils.fromAddFile(dimensionCount))
   }
@@ -220,17 +222,17 @@ case class DeltaQbeastSnapshot(tableID: QTableID) extends QbeastSnapshot with De
    */
 
   override def loadDataframeFromIndexFiles(indexFiles: Dataset[IndexFile]): DataFrame = {
-    if (snapshot.deletionVectorsSupported) {
+    if (originalSnapshot.deletionVectorsSupported) {
 
       // TODO find a cleaner version to get a subset of data from the parquet considering the deleted parts.
       throw new UnsupportedOperationException("Deletion vectors are not supported yet")
     } else {
       import indexFiles.sparkSession.implicits._
-      val rootPath = snapshot.path.getParent
+      val rootPath = originalSnapshot.path.getParent
       val paths = indexFiles.map(ifile => new Path(rootPath, ifile.path).toString).collect()
 
       indexFiles.sparkSession.read
-        .schema(snapshot.schema)
+        .schema(originalSnapshot.schema)
         .parquet(paths: _*)
 
     }
@@ -278,11 +280,13 @@ case class DeltaQbeastSnapshot(tableID: QTableID) extends QbeastSnapshot with De
    *   the FileIndex
    */
   override def loadFileIndex(): FileIndex = {
+    println("Loading file index from QbeastSnapshot")
+    println("The original Snapshot version: " + originalSnapshot.version)
     TahoeLogFileIndex(
       SparkSession.active,
-      snapshot.deltaLog,
+      originalSnapshot.deltaLog,
       basePath,
-      snapshot,
+      originalSnapshot,
       Seq.empty,
       isTimeTravelQuery = false)
   }

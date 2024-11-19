@@ -58,6 +58,24 @@ trait IndexedTable {
   def hasQbeastMetadata: Boolean
 
   /**
+   * Returns the current Snapshot of the Table
+   *
+   * This Snapshot should be used to read the table data
+   * @return
+   *   the optional snapshot
+   */
+  def getCurrentSnapshot: QbeastSnapshot
+
+  /**
+   * Returns the Snapshot of the Table at a given timestamp
+   * @param timestamp
+   *   the timestamp
+   * @return
+   *   the optional snapshot
+   */
+  def getSnapshotAt(timestamp: Long): QbeastSnapshot
+
+  /**
    * Adds the indexed columns to the parameter if:
    *   - ColumnsToIndex is NOT present
    *   - AutoIndexing is enabled
@@ -659,5 +677,18 @@ private[table] class IndexedTableImpl(
       }
     }
   }
+
+  /**
+   * Returns the current Snapshot of the Table
+   *
+   * This Snapshot should be used to read the table data
+   *
+   * @return
+   *   the current snapshot
+   */
+  override def getCurrentSnapshot: QbeastSnapshot = snapshot
+
+  override def getSnapshotAt(timestamp: Long): QbeastSnapshot =
+    metadataManager.loadSnapshotAt(tableID, timestamp)
 
 }

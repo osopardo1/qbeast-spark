@@ -40,7 +40,7 @@ class DeltaStagingDataManager(tableID: QTableID)
     with StagingDataManager {
   private val spark = SparkSession.active
 
-  protected override val snapshot: Snapshot =
+  protected override val deltaSnapshot: Snapshot =
     DeltaLog.forTable(spark, tableID.id).unsafeVolatileSnapshot
 
   private def stagingRemoveFiles: Seq[RemoveFile] = {

@@ -74,27 +74,29 @@ trait OrderedDataType extends QDataType {
 
 }
 
-object DoubleDataType extends OrderedDataType {
+trait NumericDataType extends OrderedDataType
+
+object DoubleDataType extends NumericDataType {
   override def name: String = "DoubleDataType"
   override val ordering: Numeric[Any] = implicitly[Numeric[Double]].asInstanceOf[Numeric[Any]]
 }
 
-object IntegerDataType extends OrderedDataType {
+object IntegerDataType extends NumericDataType {
   override def name: String = "IntegerDataType"
   override val ordering: Numeric[Any] = implicitly[Numeric[Int]].asInstanceOf[Numeric[Any]]
 }
 
-object LongDataType extends OrderedDataType {
+object LongDataType extends NumericDataType {
   override def name: String = "LongDataType"
   override val ordering: Numeric[Any] = implicitly[Numeric[Long]].asInstanceOf[Numeric[Any]]
 }
 
-object FloatDataType extends OrderedDataType {
+object FloatDataType extends NumericDataType {
   override def name: String = "FloatDataType"
   override val ordering: Numeric[Any] = implicitly[Numeric[Float]].asInstanceOf[Numeric[Any]]
 }
 
-object DecimalDataType extends OrderedDataType {
+object DecimalDataType extends NumericDataType {
   override def name: String = "DecimalDataType"
   override val ordering: Numeric[Any] = implicitly[Numeric[Double]].asInstanceOf[Numeric[Any]]
 }

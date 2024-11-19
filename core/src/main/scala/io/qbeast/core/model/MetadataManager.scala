@@ -34,6 +34,10 @@ trait MetadataManager {
    */
   def loadSnapshot(tableID: QTableID): QbeastSnapshot
 
+  def loadSnapshotAt(tableID: QTableID, timestamp: Long): QbeastSnapshot
+
+  def loadSnapshotAtVersion(tableID: QTableID, version: Long): QbeastSnapshot
+
   /**
    * Gets the Schema for a given table
    * @param tableID

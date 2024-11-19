@@ -103,7 +103,10 @@ case class ProtoTestContext(outDir: String, spark: SparkSession) {
 
   lazy val schema: StructType = spark.read.format("qbeast").load(tableID.id).schema
 
-  lazy val rev: Revision = DeltaQbeastSnapshot(tableID).loadLatestRevision
+  lazy val deltaLog = DeltaMetadataManager.loadDeltaLog(tableID)
+
+  lazy val rev: Revision =
+    DeltaQbeastSnapshot(tableID, deltaLog.update()).loadLatestRevision
 
 }
 

@@ -85,7 +85,9 @@ object CubeId {
    *   the identifiers of the container cubes
    */
   def containers(point: Point): Iterator[CubeId] = {
-    require(point.coordinates.forall { c => 0.0 <= c && c <= 1.0 })
+    require(
+      point.coordinates.forall { c => 0.0 <= c && c <= 1.0 },
+      s"Invalid point: ${point.coordinates.toString()}.")
     new ContainersIterator(point, None)
   }
 

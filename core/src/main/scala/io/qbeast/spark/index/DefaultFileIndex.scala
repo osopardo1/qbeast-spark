@@ -34,15 +34,14 @@ import org.apache.spark.sql.SparkSession
  * @param qbeastSnapshot
  *   the qbeast snapshot instance
  */
-class DefaultFileIndex private (qbeastSnapshot: QbeastSnapshot)
+class DefaultFileIndex private (qbeastSnapshot: QbeastSnapshot, targetFileIndex: FileIndex)
     extends FileIndex
     with QueryFiltersUtils
     with Logging
     with Serializable {
 
-  private val targetFileIndex = qbeastSnapshot.loadFileIndex()
-
-  override def rootPaths: Seq[Path] = targetFileIndex.rootPaths
+  override def rootPaths: Seq[Path] =
+    targetFileIndex.rootPaths
 
   override def listFiles(
       partitionFilters: Seq[Expression],
@@ -53,6 +52,12 @@ class DefaultFileIndex private (qbeastSnapshot: QbeastSnapshot)
     } else {
       DefaultListFilesStrategy
     }
+    println("listing files")
+    println(
+      "listing files count: " + targetFileIndex
+        .listFiles(partitionFilters, dataFilters)
+        .flatMap(_.files)
+        .size)
     strategy.listFiles(targetFileIndex, partitionFilters, dataFilters)
   }
 
@@ -69,7 +74,10 @@ class DefaultFileIndex private (qbeastSnapshot: QbeastSnapshot)
 
   override def inputFiles: Array[String] = targetFileIndex.inputFiles
 
-  override def refresh(): Unit = targetFileIndex.refresh()
+  override def refresh(): Unit = {
+    println("refreshig")
+    targetFileIndex.refresh()
+  }
 
   override def sizeInBytes: Long = targetFileIndex.sizeInBytes
 
@@ -89,8 +97,11 @@ object DefaultFileIndex {
    * @return
    *   a new instance
    */
-  def apply(qbeastSnapshot: QbeastSnapshot): DefaultFileIndex = {
-    new DefaultFileIndex(qbeastSnapshot)
+  def apply(
+      qbeastSnapshot: QbeastSnapshot,
+      optFileIndex: Option[FileIndex] = None): DefaultFileIndex = {
+    val targetFileIndex = optFileIndex.getOrElse(qbeastSnapshot.loadFileIndex())
+    new DefaultFileIndex(qbeastSnapshot, targetFileIndex)
   }
 
 }

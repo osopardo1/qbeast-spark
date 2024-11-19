@@ -15,14 +15,12 @@
  */
 package io.qbeast.sources.v2
 
-import io.qbeast.sources.QbeastBaseRelation
 import io.qbeast.table.IndexedTable
 import org.apache.spark.sql.connector.write.LogicalWriteInfo
 import org.apache.spark.sql.connector.write.SupportsOverwrite
 import org.apache.spark.sql.connector.write.SupportsTruncate
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.connector.write.WriteBuilder
-import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.DataFrame
@@ -39,6 +37,7 @@ import scala.collection.convert.ImplicitConversions.`map AsScala`
  *   the Indexed Table
  */
 class QbeastWriteBuilder(
+    qbeastTable: QbeastTableImpl,
     info: LogicalWriteInfo,
     properties: Map[String, String],
     indexedTable: IndexedTable)
@@ -82,10 +81,8 @@ class QbeastWriteBuilder(
           // TODO: Push this to Apache Spark
           // Re-cache all cached plans(including this relation itself, if it's cached) that refer
           // to this data source relation. This is the behavior for InsertInto
-          session.sharedState.cacheManager.recacheByPlan(
-            session,
-            LogicalRelation(
-              QbeastBaseRelation.createRelation(session.sqlContext, indexedTable, writeOptions)))
+          session.sharedState.cacheManager
+            .recacheByPlan(session, qbeastTable.toLogicalRelation)
         }
       }
     }

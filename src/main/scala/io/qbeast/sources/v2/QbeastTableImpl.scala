@@ -17,7 +17,7 @@ package io.qbeast.sources.v2
 
 import io.qbeast.context.QbeastContext
 import io.qbeast.core.model.QTableID
-import io.qbeast.sources.QbeastBaseRelation
+import io.qbeast.spark.index.DefaultFileIndex
 import io.qbeast.table.IndexedTableFactory
 import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
@@ -31,8 +31,13 @@ import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.connector.write.LogicalWriteInfo
 import org.apache.spark.sql.connector.write.WriteBuilder
+import org.apache.spark.sql.delta.catalog.DeltaTableV2
+import org.apache.spark.sql.execution.datasources.HadoopFsRelation
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.V2toV1Fallback
 
@@ -68,11 +73,16 @@ case class QbeastTableImpl(
 
   private val tableId = QTableID(pathString)
 
-  private val indexedTable = tableFactory.getIndexedTable(tableId)
+  val indexedTable = tableFactory.getIndexedTable(tableId)
+
+  // This MUST be initialized before the deltaLog object is created, in order to accurately
+  // bound the creation time of the table.
+  private val creationTimeMs = System.currentTimeMillis()
 
   private lazy val spark = SparkSession.active
 
-  private lazy val initialSnapshot = QbeastContext.metadataManager.loadSnapshot(tableId)
+  private lazy val initialSnapshot =
+    QbeastContext.metadataManager.loadSnapshotAt(tableId, creationTimeMs)
 
   private lazy val table: CatalogTable =
     if (catalogTable.isDefined) catalogTable.get
@@ -92,12 +102,31 @@ case class QbeastTableImpl(
 
   // Returns the write builder for the query in info
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
-    new QbeastWriteBuilder(info, options, indexedTable)
+    new QbeastWriteBuilder(this, info, options, indexedTable)
   }
 
-  def toBaseRelation: BaseRelation = {
-    QbeastBaseRelation.forQbeastTableWithOptions(indexedTable, properties().asScala.toMap)
+  lazy val toBaseRelation: BaseRelation = {
+    // QbeastBaseRelation.createRelation(indexedTable, options, Some(initialSnapshot))
+    val deltaRelation =
+      DeltaTableV2(spark, new Path(pathString)).toBaseRelation.asInstanceOf[HadoopFsRelation]
+
+    val parameters = indexedTable.verifyAndMergeProperties(options)
+    println("initializing with delta location: " + deltaRelation.toString())
+    new HadoopFsRelation(
+      location = DefaultFileIndex(initialSnapshot, Some(deltaRelation.location)),
+      partitionSchema = deltaRelation.partitionSchema,
+      dataSchema = deltaRelation.dataSchema,
+      bucketSpec = deltaRelation.bucketSpec,
+      fileFormat = deltaRelation.fileFormat,
+      options = deltaRelation.options)(sparkSession = spark) with InsertableRelation {
+
+      def insert(data: DataFrame, overwrite: Boolean): Unit = {
+        indexedTable.save(data, parameters, append = !overwrite)
+      }
+    }
   }
+
+  lazy val toLogicalRelation: LogicalRelation = LogicalRelation(toBaseRelation)
 
   override def properties(): util.Map[String, String] = {
     val description = initialSnapshot.loadDescription
