@@ -35,7 +35,6 @@ class QbeastSparkSessionExtension extends DeltaSparkSessionExtension {
     }
 
     extensions.injectOptimizerRule { session =>
-      new PrepareQbeastScan(session)
       new SampleRule(session)
     }
 

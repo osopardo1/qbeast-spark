@@ -488,11 +488,12 @@ private[table] class IndexedTableImpl(
       indexStatus: IndexStatus,
       options: QbeastOptions,
       append: Boolean): Unit = {
+    val dataFrameToWrite = data.cache()
     logTrace(s"Begin: Writing data to table $tableID")
     val stagingDataManager: StagingDataManager = stagingDataManagerFactory.getManager(tableID)
-    stagingDataManager.updateWithStagedData(data) match {
+    stagingDataManager.updateWithStagedData(dataFrameToWrite) match {
       case r: StagingResolution if r.sendToStaging =>
-        stagingDataManager.stageData(data, indexStatus, options, append)
+        stagingDataManager.stageData(dataFrameToWrite, indexStatus, options, append)
         if (snapshot.isInitial) {
           val colsToIndex = indexStatus.revision.columnTransformers.map(_.columnName)
           val dcs = indexStatus.revision.desiredCubeSize
@@ -509,6 +510,7 @@ private[table] class IndexedTableImpl(
           (tableChanges, addFiles, deleteFiles)
         }
     }
+    data.unpersist()
     logTrace(s"End: Writing data to table $tableID")
   }
 

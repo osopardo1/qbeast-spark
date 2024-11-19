@@ -280,8 +280,6 @@ case class DeltaQbeastSnapshot(tableID: QTableID, override val originalSnapshot:
    *   the FileIndex
    */
   override def loadFileIndex(): FileIndex = {
-    println("Loading file index from QbeastSnapshot")
-    println("The original Snapshot version: " + originalSnapshot.version)
     TahoeLogFileIndex(
       SparkSession.active,
       originalSnapshot.deltaLog,

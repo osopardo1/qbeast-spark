@@ -357,6 +357,7 @@ object DoublePassOTreeDataAnalyzer extends OTreeDataAnalyzer with Serializable w
       dataFrame: DataFrame,
       indexStatus: IndexStatus,
       isReplication: Boolean): (DataFrame, TableChanges) = {
+
     // For logging purposes
     val indexStatusRevision = indexStatus.revision
     logTrace(s"""Begin: Analyze for index with
@@ -368,6 +369,7 @@ object DoublePassOTreeDataAnalyzer extends OTreeDataAnalyzer with Serializable w
     val dataFrameStats = getDataFrameStats(dataFrame, columnTransformers)
     println("DATAFRAME STATS COUNT")
     println(dataFrame.count())
+    // dataFrame.explain(true)
 
     val numElements = dataFrameStats.getAs[Long]("count")
     val spaceChanges =
