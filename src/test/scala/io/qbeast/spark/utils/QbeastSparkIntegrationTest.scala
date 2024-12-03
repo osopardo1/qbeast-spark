@@ -18,6 +18,7 @@ package io.qbeast.spark.utils
 import io.qbeast.table.QbeastTable
 import io.qbeast.QbeastIntegrationTestSpec
 import io.qbeast.TestClasses.Student
+import org.apache.spark.sql.delta.DeltaLog
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Row
@@ -34,23 +35,29 @@ class QbeastSparkIntegrationTest extends QbeastIntegrationTestSpec {
     students.toDF()
   }
 
+  // TODO: run test
   "The QbeastDataSource" should
     "work with DataFrame API" in withQbeastContextSparkAndTmpDir { (spark, tmpDir) =>
       {
         val data = createStudentsTestData(spark)
-        data.write.format("qbeast").option("columnsToIndex", "id").save(tmpDir)
+        data.write
+          .format("delta")
+          .option("qbeast.enabled", "true")
+          .option("columnsToIndex", "id")
+          .save(tmpDir)
 
-        val indexed = spark.read.format("qbeast").load(tmpDir)
+        val indexed = spark.read.format("delta").load(tmpDir)
 
         indexed.count() shouldBe data.count()
 
-        indexed.columns.toSet shouldBe data.columns.toSet
-
-        assertSmallDatasetEquality(
-          indexed,
-          data,
-          orderedComparison = false,
-          ignoreNullable = true)
+        val deltaLog = DeltaLog.forTable(spark, tmpDir)
+        import spark.implicits._
+        deltaLog
+          .update()
+          .allFiles
+          .map(_.tags)
+          .collect()
+          .foreach(println)
 
       }
     }

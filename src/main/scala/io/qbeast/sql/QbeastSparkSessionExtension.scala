@@ -40,6 +40,7 @@ class QbeastSparkSessionExtension extends DeltaSparkSessionExtension {
 
     extensions.injectOptimizerRule { session =>
       new SaveAsTableRule(session)
+      new SaveAsQbeastTableRule(session)
     }
   }
 

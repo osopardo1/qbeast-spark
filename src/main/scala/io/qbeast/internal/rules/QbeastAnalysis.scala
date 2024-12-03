@@ -15,6 +15,7 @@
  */
 package io.qbeast.internal.rules
 
+import io.qbeast.catalog.QbeastCatalogUtils
 import io.qbeast.internal.rules.QbeastAnalysisUtils._
 import io.qbeast.sources.v2.QbeastTableImpl
 import org.apache.spark.sql.catalyst.plans.logical.AppendData
@@ -23,6 +24,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.SparkSession
+
+import scala.jdk.CollectionConverters.mapAsScalaMapConverter
 
 /**
  * Analyzes and resolves the Spark Plan before Optimization
@@ -78,11 +81,12 @@ class QbeastAnalysis(spark: SparkSession) extends Rule[LogicalPlan] {
  */
 object AppendQbeastTable {
 
-  def unapply(a: AppendData): Option[(DataSourceV2Relation, QbeastTableImpl)] = {
+  def unapply(a: AppendData): Option[(DataSourceV2Relation)] = {
     if (a.query.resolved) {
       a.table match {
-        case r: DataSourceV2Relation if r.table.isInstanceOf[QbeastTableImpl] =>
-          Some((r, r.table.asInstanceOf[QbeastTableImpl]))
+        case r: DataSourceV2Relation
+            if QbeastCatalogUtils.isQbeastEnabled(r.options.asCaseSensitiveMap().asScala.toMap) =>
+          Some(r)
         case _ => None
       }
     } else {

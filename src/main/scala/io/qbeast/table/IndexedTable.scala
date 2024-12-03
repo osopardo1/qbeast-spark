@@ -390,11 +390,6 @@ private[table] class IndexedTableImpl(
     result
   }
 
-  override def load(): BaseRelation = {
-    clearCaches()
-    createQbeastBaseRelation()
-  }
-
   private def snapshot = {
     if (snapshotCache.isEmpty) {
       snapshotCache = Some(metadataManager.loadSnapshot(tableID))
@@ -406,20 +401,11 @@ private[table] class IndexedTableImpl(
     snapshotCache = None
   }
 
-  /**
-   * Creates a QbeastBaseRelation for the given table.
-   * @return
-   *   the QbeastBaseRelation
-   */
-  private def createQbeastBaseRelation(): BaseRelation = {
-    QbeastBaseRelation.forQbeastTable(this)
-  }
-
   private def write(
       data: DataFrame,
       indexStatus: IndexStatus,
       options: QbeastOptions,
-      append: Boolean): BaseRelation = {
+      append: Boolean): Unit = {
     logTrace(s"Begin: Writing data to table $tableID")
     val revision = indexStatus.revision
     logDebug(s"Writing data to table $tableID with revision ${revision.revisionID}")
@@ -439,9 +425,7 @@ private[table] class IndexedTableImpl(
 
     }
     clearCaches()
-    val result = createQbeastBaseRelation()
     logTrace(s"End: Done writing data to table $tableID")
-    result
   }
 
   private def doWrite(

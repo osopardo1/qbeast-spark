@@ -15,7 +15,7 @@
  */
 package io.qbeast.internal.rules
 
-import io.qbeast.catalog.QbeastCatalogUtils.isQbeastProvider
+import io.qbeast.catalog.QbeastCatalogUtils.isSupportedProvider
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.plans.logical.CreateTableAsSelect
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -55,12 +55,12 @@ class SaveAsTableRule(spark: SparkSession) extends Rule[LogicalPlan] with Loggin
     // to make sure columnsToIndex is present
     plan transformDown {
       case saveAsSelect: CreateTableAsSelect
-          if isQbeastProvider(saveAsSelect.tableSpec.provider) =>
+          if isSupportedProvider(saveAsSelect.tableSpec.provider) =>
         val tableSpec = saveAsSelect.tableSpec
         val writeOptions = saveAsSelect.writeOptions
         saveAsSelect.copy(tableSpec = createTableSpec(tableSpec, writeOptions))
       case replaceAsSelect: ReplaceTableAsSelect
-          if isQbeastProvider(replaceAsSelect.tableSpec.provider) =>
+          if isSupportedProvider(replaceAsSelect.tableSpec.provider) =>
         val tableSpec = replaceAsSelect.tableSpec
         val writeOptions = replaceAsSelect.writeOptions
         replaceAsSelect.copy(tableSpec = createTableSpec(tableSpec, writeOptions))
