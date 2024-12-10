@@ -26,10 +26,8 @@ import org.apache.spark.qbeast.config.COLUMN_SELECTOR_ENABLED
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.delta.sources.DeltaDataSource
 import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.sql.sources.CreatableRelationProvider
-import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.RelationProvider
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.AnalysisExceptionFactory
@@ -45,18 +43,13 @@ import scala.collection.JavaConverters.mapAsScalaMapConverter
  * Qbeast data source is implementation of Spark data source API V1.
  */
 class QbeastDataSource private[sources] (private val tableFactory: IndexedTableFactory)
-    extends TableProvider
-    with CreatableRelationProvider
-    with DataSourceRegister
-    with RelationProvider
+    extends DeltaDataSource
     with Logging {
 
   /**
    * Constructor to be used by Spark.
    */
   def this() = this(QbeastContext.indexedTableFactory)
-
-  override def shortName(): String = "qbeast"
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = StructType(Seq())
 
