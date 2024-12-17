@@ -22,6 +22,8 @@ import io.qbeast.spark.internal.QbeastFunctions.qbeastHash
 import io.qbeast.IISeq
 import org.apache.spark.internal.Logging
 import org.apache.spark.qbeast.config.CUBE_DOMAINS_BUFFER_CAPACITY
+import org.apache.spark.sql.execution.datasources.HadoopFsRelation
+import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Dataset
@@ -53,6 +55,20 @@ object DoublePassOTreeDataAnalyzer extends OTreeDataAnalyzer with Serializable w
   /**
    * Estimates MaxWeight on DataFrame
    */
+
+  private def getInputSourceFilesFromDataFrame(data: DataFrame): Seq[String] = {
+    data.queryExecution.executedPlan.collectLeaves().flatMap {
+      case datasourceScan: DataSourceScanExec
+          if (datasourceScan.relation.isInstanceOf[HadoopFsRelation]) =>
+        datasourceScan.relation.asInstanceOf[HadoopFsRelation].inputFiles
+      case _ => Seq.empty
+    }
+  }
+
+  private def getInputSourceFilesFromDataset(data: Dataset[_]): Seq[String] = {
+    println("Executed Plan after transform")
+    getInputSourceFilesFromDataFrame(data.toDF)
+  }
 
   /**
    * Analyze a specific group of columns of the dataframe and extract valuable statistics
@@ -275,6 +291,8 @@ object DoublePassOTreeDataAnalyzer extends OTreeDataAnalyzer with Serializable w
       indexStatus: IndexStatus): (DataFrame, TableChanges) = {
     logTrace(s"Begin: Analyzing the input data with existing revision: ${indexStatus.revision}")
     // Compute the statistics for the indexedColumns
+    val firstPassInputSourceFiles = getInputSourceFilesFromDataFrame(dataFrame)
+    println("firstPassInputSourceFiles: " + firstPassInputSourceFiles.size)
     val dataFrameStats = getDataFrameStats(dataFrame, indexStatus.revision.columnTransformers)
     val numElements = dataFrameStats.getAs[Long]("count")
     val spaceChanges = calculateRevisionChanges(dataFrameStats, indexStatus.revision)
@@ -289,10 +307,17 @@ object DoublePassOTreeDataAnalyzer extends OTreeDataAnalyzer with Serializable w
 
     // Compute input data cube domains
     logDebug(s"Computing cube domains for the input data")
+    val inputCubeDomainsDF = weightedDataFrame
+      .transform(
+        computeInputDataCubeDomains(numElements, revisionToUse, indexStatus, isNewRevision))
+
+    val secondPassInputSourceFiles = getInputSourceFilesFromDataset(inputCubeDomainsDF)
+    println("secondPassInputSourceFiles: " + secondPassInputSourceFiles.size)
+    assert(
+      firstPassInputSourceFiles == secondPassInputSourceFiles,
+      "Input data has changed during the first pass.")
     val inputDataCubeDomains: Map[CubeId, Double] =
-      weightedDataFrame
-        .transform(
-          computeInputDataCubeDomains(numElements, revisionToUse, indexStatus, isNewRevision))
+      inputCubeDomainsDF
         .collect()
         .toMap
 
