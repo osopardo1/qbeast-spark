@@ -34,8 +34,12 @@ lazy val qbeastSpark = (project in file("."))
       sparkml % Test,
       hadoopAws % Test),
     Test / parallelExecution := false,
-    assembly / test := {},
-    assembly / assemblyOption := (assembly / assemblyOption).value.copy(includeScala = false))
+    assembly / test := {}, // Avoid running tests during assembly
+    assembly / assemblyOption := (assembly / assemblyOption).value.copy(includeScala = false),
+    assembly / assemblyShadeRules ++= Seq(
+      ShadeRule
+        .rename("org.apache.spark.sql.delta.sources.DeltaDataSource" -> "org.apache.spark.sources.QbeastDeltaDataSource")
+        .inLibrary(deltaSpark)))
   .settings(noWarningInConsole)
 
 qbeastCore / Compile / doc / scalacOptions ++= Seq(

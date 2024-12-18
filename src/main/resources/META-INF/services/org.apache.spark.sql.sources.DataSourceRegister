@@ -1,1 +1,2 @@
 io.qbeast.sources.QbeastDataSource
+org.apache.spark.sources.QbeastDeltaDataSource
